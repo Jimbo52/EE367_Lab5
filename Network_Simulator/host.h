@@ -1,8 +1,8 @@
-/* 
- * host.h 
+/*
+ * host.h
  */
 
-#define NAME_LENGTH 100 
+#define NAME_LENGTH 100
 
 typedef struct { /* State of host */
    int   physid;              /* physical id */
@@ -10,8 +10,9 @@ typedef struct { /* State of host */
    int   maindirvalid;        /* indicates if the main directory is empty */
    int   netaddr;             /* host's network address */
    int   nbraddr;             /* network address of neighbor */
+   int   rcvflag;               //Pedro forgot to add this
    packetBuffer sendPacketBuff;  /* send packet buffer */
-   packetBuffer rcvPacketBuff;   
+   packetBuffer rcvPacketBuff;
    managerLink manLink;       /* Connection to the manager */
    LinkInfo linkin;           /* Incoming communication link */
    LinkInfo linkout;          /* Outgoing communication link */
