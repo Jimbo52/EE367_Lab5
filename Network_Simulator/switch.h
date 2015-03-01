@@ -1,12 +1,35 @@
 //This file creates struct between switch and host.
 //Basically, this is a combination of host.h and man.h for switch.h
 
+				       +------------------+
+				       |	 packet  Q|
+				       | switch 	  |
+				       |	 forward T|
+				       +------------------+
+					.       ^	.	
+				.	.       |	.	.
+			.		.       |	.		.
+		.			.       |	.			.
+	+------+		+------+        |	+------+		+------+
+	| host |		| host |        |	| host |		| host |
+	+------+		+------+        |	+------+		+------+
+					        |
+					        |
+					        |
+					        |
+					   +--------+
+					   | sysman |
+					   +--------+
 
 //create queue to store incoming packets.
+
+#define NUMLINKS 100
+#define MAXPACKETS 100;
+
 typedef struct {
-	packetBuffer packet;
-	int head;
-	int tail;
+	packetBuffer packet[MAXPACKETS];
+	int head;	//index of head
+	int tail;	//index of tail
 } packetqueue;
 
 //below to create a forwardtable
@@ -21,15 +44,18 @@ typedef struct {
 } switchLinkArrayType;
 
 typedef struct {
-	int valid;
-	int destinationAdd;
-	int linkID;
+	int valid[NUMLINKS];
+	int destinationAddr[NUMLINKS];
+	int linkID[NUMLINKS];
+	int count;
 } forwardTable; 
 
 typedef struct {
-	int physid;
+	int physid;	//physic id for switch, might use later but not for task1 I think
 	int rcvflag;
-	packetBuffer packetBuff;
+	int numlinks;
+	packetBuffer sendpacketBuff;
+	packetBuffer rcvPacketBuff;
 	switchLink swiLink;
 	LinkInfo linkin[NUMLINKS];	
 	LinkInfo linkout[NUMLINKS];
@@ -40,6 +66,6 @@ void switchMain(switchState * swistate);
 void switchInit(switchState * swistate, int physid);
 
 //operation for pakcetqueue, a new packet arrivals at switch or a packet leave for a host
-void AppendQ(packetqueue * q, packetBuffer newpacket);
+void AppendQ(packetqueue *q, packetBuffer newpacket);
 
 packetBuffer ServeQ(packetqueue *q);
