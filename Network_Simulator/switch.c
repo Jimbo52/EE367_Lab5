@@ -63,7 +63,7 @@ void switchMain(switchState *swistate)
 	forwardingTable table;
 	packetqueue *packetq;
 	packetBuffer transingpacket;
-	int i,j;	//index i for each host <-> switch, j for each entry in forwardtable
+	int i,j;	//index i for each host <----> switch, j for each entry in forwardtable
 	int linkID;
 
 //init packet queue
@@ -75,10 +75,13 @@ void switchMain(switchState *swistate)
 			linkReceive(&(sstate->linkin[i]), &tmpbuff);
 			if(tmpbuff.valid == 1 && tmpbuff.new == 1){
 				for(j = 0; j < table.count; j++){
-					table.linkID[j] = swistate->linkout[i].linkID;
-					break;
+					if(table.destinationAddr[j] == tmpbuff.srcaddr){
+						//update table linkID
+						table.linkID[j] = swistate->linkout[i].linkID;
+						break;
+					}
 				}
-				if(j == table.count) {
+				if(j == table.count) { //update new entry to table
 					table.valid[j] = 1;
 					table.destinationAddr[j] = tmpbuff.srcaddr;
 					table.linkID[j] = swistate->linkout[i].linkID;
@@ -90,23 +93,26 @@ void switchMain(switchState *swistate)
 		if((packetq->tail + 1) != packetq->head){ //serve a pcket from head of Q
 			transingpacket = ServeQ(packetq);
 		}
-		else {			//wait and check again
+		else {			// empty Q, wait and check again
 			usleep(TENMILLISEC);
 		}
 		if(transingpakcet.valid == 1 && transingpacket.new == 1){
-			swistate->packetrcvPackBuff = transingpacket;
+			swistate->rcvPackBuff.srcaddr = transingpacket.srcaddr;
+			swistate->rcvPackBuff.dstaddr = transingpacket.dstaddr;
+			swistate->rcvPackBuff.length = transingpacket.length;
+			strcpy(swistate->rcvPackBuff.payload, transingpacket.payload);
 			swistate->rcvPacketBuff.new = 1;
 			swistate->rcvPacketBuff.valid = 1;
 
 			for(j = 0; j< table.count; j++) {
 				if(table.destinationAddr[j] == transingpacket.dstaddr){
 					linkID = table.linkID[j];
-					break;	//fill the table with new entry
+					break;	// take the linkID in table to transmit
 				}
 			}
 			if(j == table.count)
 				linkID = NONEXIST;	//entry not found, means new link
-			switchTransmitPacket(swistate, buffer, linkID);	//send to linkID
+			switchTransmitPacket(swistate, linkID);	//send to linkID
 			swistate->rcvPacketBuff.new = 0;	// indicate packet sent, no new 
 		}
 		usleep(TENMILLISEC);

@@ -23,7 +23,7 @@
 
 //create queue to store incoming packets.
 
-#define NUMLINKS 100
+#define NUMLINKS 200
 #define MAXPACKETS 100;
 
 typedef struct {
@@ -59,7 +59,7 @@ typedef struct {
 	switchLink swiLink;
 	LinkInfo linkin[NUMLINKS];	
 	LinkInfo linkout[NUMLINKS];
-} swtichState;
+} switchState;
 
 void switchMain(switchState * swistate);
 
