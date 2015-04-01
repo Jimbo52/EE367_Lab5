@@ -59,24 +59,22 @@ typedef struct {
 
 typedef struct {
 	int physid;	//physic id for switch, might use later but not for task1 I think
-	int rcvflag;
 	int numlinks;
-	packetBuffer sendpacketBuff;
-	packetBuffer rcvPacketBuff;
+	forwardTable table;
+	packetqueue packetQueue;
 	switchLink swiLink;
 	LinkInfo linkin[NUMSWITCHLINKS];	
 	LinkInfo linkout[NUMSWITCHLINKS];
 } switchState;
 
 void switchMain(switchState * swistate);
-
 void switchInit(switchState * swistate, int physid);
 
-//operation for pakcetqueue, a new packet arrivals at switch or a packet leave for a host
-packetqueue *init();
+void AppendQ(switchState *swistate, packetBuffer newpacket);
+Packet * ServeQ(switchState *swistate);
 
-void AppendQ(packetqueue *q, packetBuffer newpacket);
+void displayForwardTable(switchState *swistate);
 
-Packet * ServeQ(packetqueue *q);
+void switchTransmitPacket(switchState *swistate);
 
 #endif
