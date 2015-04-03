@@ -1,0 +1,41 @@
+README File
+
+Team Members:
+Harley Cumming
+Chelsea Lau
+Ejay Tumacder
+
+To compile net367:
+make net367
+
+To run program:
+net367 (cshell)
+or
+./net367 (bash)
+
+Upon startup, the program will prompt the user for a file from which to read
+the topology of the network.  Type in the file name (e.g. startopology.dat or
+treetopology.dat).  The program will reiterate the information from the file
+to ensure that the desired information is being used.
+
+From there, the program will turn to the system manager, where normal
+operation is taken.
+
+Creating a topology:
+The accepted format for the topology file is as follows:
+
+Number of hosts:
+#
+Number of switchs:
+#
+Number of links:
+#
+Link endpoints (i,j):
+(i,j)
+...
+(k,l)
+
+where the #'s are integers representing the number of hosts, switchs, and
+links, as appropriate, and i,j,k,l represent nodes (either switchs or hosts).
+Hosts are labeled from 0 to n-1, where n is the number of hosts.  Switchs are
+labeled n to n+m-1, where m is the number of switchs.

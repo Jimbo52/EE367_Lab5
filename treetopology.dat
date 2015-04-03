@@ -1,0 +1,23 @@
+Number of hosts:
+5
+Number of switchs:
+4
+Number of links:
+16
+Link endpoints (i,j):
+(0,5)
+(5,0)
+(1,5)
+(5,1)
+(2,6)
+(6,2)
+(3,7)
+(7,3)
+(4,7)
+(7,4)
+(5,8)
+(8,5)
+(6,8)
+(8,6)
+(7,8)
+(8,7)
