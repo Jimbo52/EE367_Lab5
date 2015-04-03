@@ -3,6 +3,8 @@
 
 #define NUMSWITCHLINKS 200
 #define NUMSWITCHS 100
+#define NUMSWITCHSNEIGHBOR 2
+#define LOCAL_PACKET_SIZE 6*8
 
 typedef struct packet{
 	packetBuffer packet;
@@ -37,7 +39,14 @@ typedef struct {
 	tableEntry Entry[NUMSWITCHLINKS];
 } forwardTable; 
 
-typedef struct {
+typedef struct SwitchState{
+	int root;
+	int distance;
+	struct SwitchState *parent;
+	char child[NUMSWITCHSNEIGHBOR];
+	char datalink[NUMSWITCHSNEIGHBOR];
+	char TLVpacket[LOCAL_PACKET_SIZE];
+
 	int physid;	//physic id for switch, might use later but not for task1 I think
 	int numlinks;
 	forwardTable table;
@@ -52,9 +61,11 @@ void switchInit(switchState * swistate, int physid);
 
 void AppendQ(switchState *swistate, packetBuffer newpacket, int k);
 Packet * ServeQ(switchState *swistate);
+void generateStatePacket(switchState *swistate);
 
 void displayForwardTable(switchState *swistate);
 
 void switchTransmitPacket(switchState *swistate);
+void switchTransmitState(switchState *swistate);
 
 #endif
