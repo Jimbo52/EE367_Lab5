@@ -25,7 +25,5 @@ switch.o: switch.c
 	gcc -c switch.c
 
 clean:
-	rm  -f *.o
+	rm -f *.o net367
 
-real_clean: clean
-	rm  -f net367 a.out core
