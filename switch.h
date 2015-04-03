@@ -1,57 +1,60 @@
-/* 
- * switch.h 
- */
+#ifndef SWITCH_H
+#define SWITCH_H
 
-#define NUMSWITCHS 100
 #define NUMSWITCHLINKS 200
+#define NUMSWITCHS 100
 
-typedef struct pqnode {
-   packetBuffer packet;
-   int k;
-   struct pqnode * next;
-} pqnode;
-
-typedef struct {
-   pqnode * head;
-   pqnode * tail;
-} pqueue;
+typedef struct packet{
+	packetBuffer packet;
+	int k;
+	struct packet *next;
+} Packet;
 
 typedef struct {
-   int toHost[2];
-   int fromHost[2];
+	Packet *head;
+	Packet *tail;	
+} packetqueue;
+
+//below to create a forwardtable
+typedef struct{
+	int toHost[2];
+	int fromHost[2];
 } switchLink;
 
-typedef struct { /* State of host */
-   int   physid;              /* physical id */
-   int   rcvflag;
-   int   numlinks;
-   packetBuffer sendPacketBuff;  /* send packet buffer */
-   packetBuffer rcvPacketBuff;  
-   switchLink sLink; 
-   LinkInfo linkin[NUMSWITCHLINKS];           /* Incoming communication link */
-   LinkInfo linkout[NUMSWITCHLINKS];          /* Outgoing communication link */
-} switchState;
-
 typedef struct {
-   int numlinks;
-   switchLink link[NUMSWITCHLINKS];
+	int numlinks;
+	switchLink link[NUMSWITCHLINKS];
 } switchLinkArrayType;
 
 typedef struct {
-   int valid;
-   int destNetworkAddress;
-   LinkInfo outlink;
+	int valid;
+	int destNetworkAddress;
+	LinkInfo outlink;
 } tableEntry;
 
 typedef struct {
-   int numentries;
-   tableEntry Entry[NUMSWITCHLINKS];
-} forwardingTable;
+	int numentries;
+	tableEntry Entry[NUMSWITCHLINKS];
+} forwardTable; 
 
-void switchMain(switchState * sstate);
+typedef struct {
+	int physid;	//physic id for switch, might use later but not for task1 I think
+	int numlinks;
+	forwardTable table;
+	packetqueue packetQueue;
+	switchLink swiLink;
+	LinkInfo linkin[NUMSWITCHLINKS];	
+	LinkInfo linkout[NUMSWITCHLINKS];
+} switchState;
 
-void switchInit(switchState * sstate, int physid);
+void switchMain(switchState * swistate);
+void switchInit(switchState * swistate, int physid);
 
-pqueue * init(void);
-pqnode * pop(pqueue * q);
-void push(pqueue * q,packetBuffer p,int k);
+void AppendQ(switchState *swistate, packetBuffer newpacket, int k);
+Packet * ServeQ(switchState *swistate);
+
+void displayForwardTable(switchState *swistate);
+
+void switchTransmitPacket(switchState *swistate);
+
+#endif

@@ -1,312 +1,173 @@
-/* 
- * This is the source code for the SWITCH.
- * hostMain is the main function for the host.  It is an infinite
- * loop that repeatedy polls the connection from the manager and
- * its input link.  
- *
- * If there is command message from the manager,
- * it parses the message and executes the command.  This will
- * result in it sending a reply back to the manager.  
- *
- * If there is a packet on its incoming lik, it checks if
- * the packet is destined for it.  Then it stores the packet
- * in its receive packet buffer.
- *
- * There is also a 10 millisecond delay in the loop caused by
- * the system call "usleep".  This puts the host to sleep.  This
- * should reduce wasted CPU cycles.  It should also help keep
- * all nodes in the network to be working at the same rate, which
- * helps ensure no node gets too much work to do compared to others.
- */
-
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <sys/types.h>
-
+#include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
 
-#include "main.h"
 #include "utilities.h"
+#include "main.h"
 #include "link.h"
 #include "man.h"
 #include "switch.h"
 
-#define EMPTY_ADDR  0xffff  /* Indicates that the empty address */
-                             /* It also indicates that the broadcast address */
-#define MAXBUFFER 1000
-#define PIPEWRITE 1 
-#define PIPEREAD  0
-#define TENMILLISEC 10000   /* 10 millisecond sleep */
+#define PIPEREAD 0
+#define PIPEWRITE 1
+#define MAXBUFFER 100
+#define TENMILLISEC 10000
+#define EMPTY_ADDR 0xffff
 
-/* 
- * hostInit initializes the host.  It calls
- * - hostInitState which initializes the host's state.
- * - hostInitRcvPacketBuff, which initializes the receive packet buffer
- * - hostInitSendPacketBuff, which initializes the send packet buffer
- */
-void switchInitState(switchState * sstate, int physid); 
-void switchInitRcvPacketBuff(packetBuffer * packetbuff);
-void switchInitSendPacketBuff(packetBuffer * packetbuff);
+#define DEBUG TABLE
 
-/*
- * hostMain is the main loop for the host. It has an infinite loop.
- * In the loop it first calls
- * hostCommandReceive to check if a command message came from the
- * manager.
- * If a command arrived, then it checks the first word of the
- * message to determine the type of command.  Depending on the
- * command it will call
- * - hostSetNetAddr to set the host's network address
- *      The command message should be "SetNetAddr <network address>"
- * - hostSetMainDir to set the host's main directory
- *      The command message should be "SetMainDir <directory name>"
- * - hostClearRcvFlg to clear the host's receive flag
- * - hostUploadPacket to upload a file to the host's send packet
- *      buffer. The command message should be "UploadPacket <file name>"
- * - hostDownloadPacket to download the payload of the host's
- *      receive packet buffer to a file.  The command message
- *      should be "DownloadPacket <file name>"
- * - hostTransmitPacket to transmit the packet in the send packet buffer.
- *      The command message should be "TransmitPacket <destination address>"
- * - hostGetHostState to get the host's state.  The command message
- *      should be "GetHostState".  
- */
-
-void switchUploadPacket(switchState * sstate, char fname[], char replymsg[]); 
-void switchDownloadPacket(switchState * sstate, char fname[], char replymsg[]); 
-void switchTransmitPacket(switchState * sstate, char word[],int linkin,int transmitlink);
-
-/*
- * Functions
- */
-
-/*
- * switchTransmitPacket will transmit a packet in the send packet buffer
- */
-void switchTransmitPacket(switchState * sstate, char word[],int linkin,int transmitlink)
+void switchMain(switchState *swistate)
 {
-char dest[1000];
-int  dstaddr;
-int k;
+	char buffer[1000];
+	char word[1000];
+	int value;
+	char replymsg[1000];
+	packetBuffer tmpbuff;
 
-//printf("Transmitting Packet on Switch\n");
+	forwardTable *table;
+	table = &(swistate->table);
 
-/* Get the destination address from the manager's command message (word[]) */ 
-//findWord(dest, word, 2);
-//dstaddr = ascii2Int(dest);
+	Packet *transingpacket;
+	int k,j;	//index i for each host <----> switch, j for each entry in forwardtable
 
-/* 
- * Set up the send packet buffer's source and destination addresses
- */
-//sstate->sendPacketBuff.dstaddr = dstaddr;
-//sstate->sendPacketBuff.srcaddr = sstate->netaddr;
+	while(1) {
+		for(k = 0; k <swistate->numlinks; k++) {
+			linkReceive(&(swistate->linkin[k]), &tmpbuff);
+			if(tmpbuff.valid == 1 && tmpbuff.new == 1){	//a new packet comming
+				for(j = 0; j < table->numentries; j++){
+					if(table->Entry[j].destNetworkAddress == tmpbuff.srcaddr){
+						//update table linkID
+						table->Entry[j].outlink = swistate->linkout[k];
+						break;
+					}
+				}
+				if(j == table->numentries) { //update new entry to table
+					table->Entry[j].valid = 1;
+					table->Entry[j+1].valid = 0;
+					table->Entry[j].destNetworkAddress = tmpbuff.srcaddr;
+					table->Entry[j].outlink = swistate->linkout[k];
+					table->numentries++;
+					#if DEBUG == TABLE
+					displayForwardTable(swistate);
+					#endif
+				}
+				AppendQ(swistate, tmpbuff, k);
+			}
+		}
 
-if(transmitlink > -1) {
-	for(k = 0; k < sstate->numlinks; k++) {
-	    if(sstate->linkout[k].linkID == transmitlink) {
-//		printf("Sending on link %d\n",transmitlink);
-		linkSend(&sstate->linkout[k],&(sstate->rcvPacketBuff));
-		break;
-	    }
-}
-}
-else {
-/* Transmit the packet on the link */
-for(k = 0; k < sstate->numlinks; k++)  {
-	if(k != linkin) {
-		linkSend(&(sstate->linkout[k]), &(sstate->rcvPacketBuff));
-//		printf("Transmitted on link %d\n",sstate->linkout[k].linkID);
-	}
+
+		if(swistate->packetQueue.head != NULL){ //serve a pcket from head of Q
+			switchTransmitPacket(swistate);	
+		}
+		else {			// empty Q, wait and check again
+			usleep(TENMILLISEC);
+			continue;
+		}
+		usleep(TENMILLISEC);
 	}
 }
 
+void switchInit(switchState *swistate, int physid)
+{
+	swistate->physid = physid;
+	swistate->numlinks = 0;
+	
+	//forwarding table
+	swistate->table.numentries = 0;
+
+	//queue
+	swistate->packetQueue.head = NULL;
+	swistate->packetQueue.tail = NULL;
 }
 
 
-/* 
- * Main loop of the host node
- *
- * It polls the manager connection for any requests from
- * the manager, and repliies
- *
- * Then it polls any incoming links and downloads any
- * incoming packets to its receive packet buffer
- *
- * Then it sleeps for 10 milliseconds
- *
- * Then back to the top of the loop
- *
+void AppendQ(switchState *swistate, packetBuffer newpacket, int k)
+{
+	Packet * new = malloc(sizeof(Packet));
+	new->k = k;
+	new->packet = newpacket;
+	new->next = NULL;
+
+	packetqueue *q;
+	q = &(swistate->packetQueue);
+
+	if (q->head == NULL){
+		q->head = q->tail = new;
+	}
+	else {
+		q->tail->next = new;
+		q->tail = new;
+	}
+}
+
+Packet* ServeQ(switchState *swistate)
+{
+	packetqueue *q;
+	q = &(swistate->packetQueue);
+	Packet *head;
+	head = q->head;
+
+	q->head = q->head->next;
+	if(q->head == NULL)
+		q->tail = NULL;
+	return head;
+}
+
+void displayForwardTable(switchState *swistate)
+{
+	int i;
+	forwardTable *it;
+	it = &(swistate->table);
+	printf("\n\n\nvalid\t\tDestination Network Address\t\tOutgoing link #\n");
+	for(i = 0; i < it->numentries; i++)
+	{
+	printf("%d\t\t%d\t\t\t\t\t%d\n",it->Entry[i].valid,it->Entry[i].destNetworkAddress,it->Entry[i].outlink.linkID);
+	}
+	printf("\n\n");
+}
+
+
+/* transmit from switch to des. if linkID is in table, send via linkID
+ * otherwise, send to all host. Have to fix to not send to the source host, 
+ * maybe add a int variable in the function input to track which input link is.
+ * don't know exactly how.
  */
-void switchMain(switchState * sstate)
+void switchTransmitPacket(switchState *swistate)
 {
-char buffer[1000]; /* The message from the manager */
-char word[1000];
-int  value;
-int k,j,transmitlink;
-char replymsg[1000];   /* Reply message to be displayed at the manager */
-packetBuffer tmpbuff;
-forwardingTable ftable;
-pqueue * pq = init();
-pqnode * pqptr;
+	int i,transmitlink;
+	Packet *transingpacket;
+	transingpacket = ServeQ(swistate);
+	forwardTable *table;
+	table = &(swistate->table);
+	
+	if(transingpacket->packet.valid == 1 && transingpacket->packet.new == 1){
+		for(i = 0; i< table->numentries; i++) {
+			if(table->Entry[i].destNetworkAddress == transingpacket->packet.dstaddr){
+				transmitlink = table->Entry[i].outlink.linkID;
+				break;	
+			}
+		}
+		if(i == table->numentries)
+			transmitlink = -1;	
+	}
 
-
-while(1) {
-
-   /* Check if there is an incoming packet */
-   for(k = 0;k < sstate->numlinks; k++)  {
-        linkReceive(&(sstate->linkin[k]), &tmpbuff);	
-        if(tmpbuff.valid == 1 && tmpbuff.new == 1) {
-	     for(j = 0; j < ftable.numentries; j++) {
-//		   printf("\nIn table\n");
-//		   printf("%d\t%d\t%d\n",ftable.Entry[j].valid,ftable.Entry[j].destNetworkAddress,ftable.Entry[j].outlink.linkID);
-                   if(ftable.Entry[j].destNetworkAddress == tmpbuff.srcaddr) {
-//			printf("Changing link number\n");
-			ftable.Entry[j].outlink = sstate->linkout[k];
-			break;
-		   }
-             }
-	     if(j == ftable.numentries) {
-                   ftable.Entry[j].valid = 1;
-		   ftable.Entry[j+1].valid = 0;
-		   ftable.Entry[j].destNetworkAddress = tmpbuff.srcaddr;
-		   ftable.Entry[j].outlink = sstate->linkout[k]; 
-		   ftable.numentries++;
-//		   printf("Adding to table\n");
-//		   printf("%d\t%d\t%d\n",ftable.Entry[j].valid,ftable.Entry[j].destNetworkAddress,ftable.Entry[j].outlink.linkID);
-             }
-             
-         //    printf("We're done\n");
-   //          printf("Temp buff: %s\n",tmpbuff.payload);
-	     push(pq,tmpbuff,k);            	
-       //      break;
-        } 
-
-//   if(strlen(tmpbuff.payload)) 
- //      printf("tmpbuff.valid == %d, tmpbuff.new == %d\n",tmpbuff.valid,tmpbuff.new);
-   }
-   
-   /* 
-    * If there is a packet and if the packet's destination address 
-    * is the host's network address then store the packet in the
-    * receive packet buffer
-    */
-   if(pq->head != NULL) {
-      pqptr = pop(pq);
-   }
-   else {
-      usleep(TENMILLISEC);
-      continue;
-   }
-   if (pqptr->packet.valid == 1 && pqptr->packet.new == 1) {
-      sstate->rcvPacketBuff = pqptr->packet;
-      sstate->rcvPacketBuff.new = 1;
-      sstate->rcvPacketBuff.valid = 1;
-
-      for(j = 0; j < ftable.numentries; j++) {
-	  if(ftable.Entry[j].destNetworkAddress == pqptr->packet.dstaddr) {
-	      transmitlink = ftable.Entry[j].outlink.linkID;
-	      break;
-	  }
-      }
-      if(j == ftable.numentries)
-      	  transmitlink = -1;
-    //  printf("Sending: %s\n",sstate->rcvPacketBuff.payload); 
-      switchTransmitPacket(sstate,buffer,pqptr->k,transmitlink);
-      sstate->rcvPacketBuff.new = 0;
-    }
-
-   /* The host goes to sleep for 10 ms */
-   usleep(TENMILLISEC);
-
-} /* End of while loop */
-
-}
-
-/* 
- * Initializes the switch.   
- */
-void switchInit(switchState * sstate, int physid)
-{
-
-switchInitState(sstate, physid);     /* Initialize switch's state */
-
-sstate->numlinks = 0;
-
-/* Initialize the receive and send packet buffers */
-switchInitRcvPacketBuff(&(sstate->rcvPacketBuff));  
-switchInitSendPacketBuff(&(sstate->rcvPacketBuff)); 
-}
-
-/* 
- * Initialize send packet buffer 
- */
-void switchInitSendPacketBuff(packetBuffer * packetbuff)
-{
-packetbuff->valid = 0;
-packetbuff->new = 0;
-}
-
-
-/* 
- * Initialize receive packet buffer 
- */ 
-
-void switchInitRcvPacketBuff(packetBuffer * packetbuff)
-{
-packetbuff->valid = 0;
-packetbuff->new = 0;
-}
-
-/* 
- * Initialize the state of the switch 
- */
-void switchInitState(switchState * sstate, int physid)
-{
-sstate->physid = physid;
-sstate->rcvPacketBuff.valid = 0;
-sstate->rcvPacketBuff.new = 0;
-}
-
-pqueue * init(void)
-{
-   pqueue * q;
-   q = (pqueue *)malloc(sizeof(pqueue));
-
-   if(q == NULL)
-   {
-    fprintf(stderr,"Insufficient mem for new queue.\n");
-    exit(1);
-   }
-
-   q->head = q->tail = NULL;
-   return q;
-}
-
-pqnode * pop(pqueue * q)
-{
-
-   pqnode * head;
-   head = q->head;
-   if(q->head != q->tail)
-     q->head = q->head->next;
-   else q->head = q->tail = NULL;
-   return head;
-}
-
-void push(pqueue * q,packetBuffer p,int k)
-{
-   pqnode * newnode = (pqnode *)malloc(sizeof(pqnode));
-
-   newnode->k = k;
-   newnode->packet = p;
-   newnode->next = NULL;
-   if(q->head == NULL) q->head = q->tail = newnode;
-   else
-   {
-      q->tail->next = newnode;
-      q->tail = newnode;
-   }
-
+	if(transmitlink > -1) {
+		for(i = 0; i < swistate->numlinks; i++) 
+		{
+			if(swistate->linkout[i].linkID == transmitlink)
+			{
+				linkSend(&swistate->linkout[i], &(transingpacket->packet));
+				break;
+			}
+		}
+	}
+	else {		
+		for(i = 0; i < swistate->numlinks; i++){
+			if(i != transingpacket->k)
+			linkSend(&(swistate->linkout[i]), &(transingpacket->packet));
+		}
+	}
 }

@@ -152,7 +152,7 @@ for (physid; physid < numhosts+numswitchs; physid++) {
       switchInit(&sstate, physid);              /* Initialize host's state */
 
       /* Initialize the connection to the manager */ 
-      sstate.sLink = switchLinkArray.link[physid];
+      sstate.swiLink = switchLinkArray.link[physid];
 
       /* 
        * Close all connections not connect to the host
