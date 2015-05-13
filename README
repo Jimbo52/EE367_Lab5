@@ -1,0 +1,23 @@
+Team Members:
+	Hualiang Li
+	Kunliang Xiao
+	James Bynes 
+
+To compile net367:
+make
+
+To run program:
+./net367 
+
+At the begining of the program, it will ask user to input a file that contains a topology
+describing the network. (star.dat or tree.dat)
+
+There are files named 
+	testmsg000 in TestDir0 
+	or testmsg111 in TestDir1
+	or testmsg222 in TestDir2
+	or testmsg333 in TestDir3
+	or testmsg444 in TestDir4
+that contain 1000+ bytes, which can be used to
+test our program.
+
