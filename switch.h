@@ -2,9 +2,7 @@
 #define SWITCH_H
 
 #define NUMSWITCHLINKS 200
-#define NUMSWITCHS 100
-#define NUMSWITCHSNEIGHBOR 2
-#define LOCAL_PACKET_SIZE 6*8
+#define LOCAL_PACKET_SIZE 11
 
 typedef struct packet{
 	packetBuffer packet;
@@ -43,8 +41,8 @@ typedef struct SwitchState{
 	int root;
 	int distance;
 	struct SwitchState *parent;
-	char child[NUMSWITCHSNEIGHBOR];
-	char datalink[NUMSWITCHSNEIGHBOR];
+	char child[NUMSWITCHLINKS];
+	char datalink[NUMSWITCHLINKS];
 	char TLVpacket[LOCAL_PACKET_SIZE];
 
 	int physid;	//physic id for switch, might use later but not for task1 I think
@@ -61,11 +59,13 @@ void switchInit(switchState * swistate, int physid);
 
 void AppendQ(switchState *swistate, packetBuffer newpacket, int k);
 Packet * ServeQ(switchState *swistate);
-void generateStatePacket(switchState *swistate);
+void generateStatePacket(switchState *swistate, int linkout);
+void processStatePacket(switchState *swistate, char packet[], LinkInfo *link, int k);
 
 void displayForwardTable(switchState *swistate);
 
 void switchTransmitPacket(switchState *swistate);
 void switchTransmitState(switchState *swistate);
+void switchReceiveState(LinkInfo *link, switchState *swistate, int k);
 
 #endif

@@ -17,7 +17,7 @@
 #define TENMILLISEC 10000
 #define EMPTY_ADDR 0xffff
 
-#define DEBUG TABLE
+#define DEBUG TLV
 
 void switchMain(switchState *swistate)
 {
@@ -30,7 +30,6 @@ void switchMain(switchState *swistate)
 	forwardTable *table;
 	table = &(swistate->table);
 
-	Packet *transingpacket;
 	int k,j;	//index i for each host <----> switch, j for each entry in forwardtable
 
 	while(1) {
@@ -81,6 +80,17 @@ void switchInit(switchState *swistate, int physid)
 	//queue
 	swistate->packetQueue.head = NULL;
 	swistate->packetQueue.tail = NULL;
+
+	//tree
+	swistate->root = physid;
+	swistate->distance = 10000;
+	swistate->parent = NULL;
+	int i;
+	for(i=0;i<NUMSWITCHLINKS;i++)
+	{
+		swistate->child[i] = 0;
+		swistate->datalink[i] = 0;
+	}
 }
 
 
@@ -114,6 +124,75 @@ Packet* ServeQ(switchState *swistate)
 	if(q->head == NULL)
 		q->tail = NULL;
 	return head;
+}
+
+void generateStatePacket(switchState *swistate, int link)
+{
+	//Type
+	unsigned char temp[1];
+	temp[0] = 1;
+	appendWithSpace(swistate->TLVpacket,temp);
+
+	//Length	
+	temp[0] = 4;
+	appendWithSpace(swistate->TLVpacket,temp);
+
+	//Root
+	char temp2[2];
+	memcpy(temp2, (char*)&(swistate->root),2); 	
+	appendWithSpace(swistate->TLVpacket,temp);
+
+	//Distance
+	int2Ascii(temp,swistate->distance);
+	appendWithSpace(swistate->TLVpacket,temp);
+	
+	//Child
+	temp[0] = swistate->child[link];
+	appendWithSpace(swistate->TLVpacket,temp);	
+	
+}
+
+void processStatePacket(switchState *swistate, char packet[], LinkInfo *link, int k)
+{
+	char fromPacket[1];
+	findWord(fromPacket, packet, 1);	
+
+	if(ascii2Int(fromPacket) != 1)
+	{
+		#if DEBUG == TLV
+		printf("Invalid TLV packet.\n");
+		#endif
+
+		return;
+	}
+	
+	//find the minimum root and synchronize it
+	findWord(fromPacket, packet, 3);
+	int temp = ascii2Int(fromPacket);
+	if(swistate->root > temp)
+	{
+		swistate->root = temp;
+		//if current state is root, then its distance is 0
+		if(swistate->root == swistate->physid)
+			swistate->distance = 0;
+	}
+
+	//distance update and set parent if necessary
+	findWord(fromPacket, packet, 4);
+	temp = ascii2Int(fromPacket);
+	if(swistate->distance > (temp + 1))
+	{
+		swistate->distance = temp + 1;
+		swistate->parent->linkin[k] = *link;
+		swistate->parent->linkout[k] = *link;
+		
+		//?????????????????????????????????????????????????
+	}
+
+	//Identify children
+	findWord(fromPacket, packet, 5);
+	if(fromPacket == 1)
+	
 }
 
 void displayForwardTable(switchState *swistate)
@@ -170,4 +249,36 @@ void switchTransmitPacket(switchState *swistate)
 			linkSend(&(swistate->linkout[i]), &(transingpacket->packet));
 		}
 	}
+}
+
+void switchTransmitState(switchState *swistate)
+{
+	int i;
+	for(i=0;i<swistate->numlinks;i++)
+	{
+		generateStatePacket(swistate,i);
+		#if DEBUG == TLV
+		printf("Sending TLV: %s\n",swistate->TLVpacket);
+		#endif
+
+		if(swistate->linkout[i].linkType == UNIPIPE)
+		write(swistate->linkout[i].uniPipeInfo.fd[PIPEWRITE],
+			  swistate->TLVpacket,strlen(swistate->TLVpacket));
+	}		
+}
+
+void switchReceiveState(LinkInfo *link, switchState *swistate, int k)
+{
+	char packet[LOCAL_PACKET_SIZE];
+	int n;
+	if(link->linkType == UNIPIPE)
+	{
+		n = read(link->uniPipeInfo.fd[PIPEREAD], packet, LOCAL_PACKET_SIZE);
+		packet[n] = '\0';
+
+		#if DEBUG == TLV
+		printf("Receving TLV: %s\n",packet);
+		#endif
+		processStatePacket(swistate,packet,link,k);
+	}	
 }
